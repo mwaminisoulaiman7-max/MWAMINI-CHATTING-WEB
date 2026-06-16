@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MWAMINI CHAT WEB</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: #008069; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .auth-container { width: 100%; max-width: 450px; }
+        .auth-card { background: #ffffff; padding: 40px 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); width: 100%; }
+        .input-group { margin-bottom: 16px; }
+        .input-group input { width: 100%; padding: 14px; border: 1px solid #cccccc; border-radius: 6px; font-size: 15px; outline: none; transition: border-color 0.2s; background-color: #f8f9fa; }
+        .input-group input:focus { border-color: #008069; background-color: #ffffff; }
+        .btn-primary { width: 100%; background: #005c4b; color: white; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+        .btn-primary:hover { background: #004d3e; }
+        .btn-secondary-guest { width: 100%; background: transparent; color: #005c4b; border: 2px dashed #005c4b; padding: 12px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 15px; transition: background 0.2s; }
+        .btn-secondary-guest:hover { background: rgba(0, 92, 75, 0.04); }
+        .hidden { display: none !important; }
+        #error-message { min-height: 22px; font-size: 13px; font-weight: bold; text-align: center; margin-bottom: 15px; line-height: 1.4; color: #ea0038; }
+        .support-footer { margin-top: 25px; padding-top: 15px; border-top: 1px solid #e9edef; text-align: center; font-size: 13px; color: #667781; }
+        .support-link { color: #005c4b; font-weight: bold; text-decoration: none; margin-left: 3px; cursor: pointer; }
+        .support-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+        <div class="auth-card">
+            <h2 style="text-align: center; color: #005c4b; font-weight: 800; margin-bottom: 15px; letter-spacing: 0.3px;">MWAMINI CHAT WEB</h2>
+            
+            <p id="error-message"></p>
+
+            <div id="auth-form-fields">
+                <div class="input-group" id="name-group">
+                    <input type="text" id="auth-name" placeholder="Full Name">
+                </div>
+                <div class="input-group">
+                    <input type="email" id="auth-email" placeholder="Email Address">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="auth-password" placeholder="Password">
+                </div>
+                
+                <div id="forgot-password-container" class="hidden" style="text-align: right; margin-top: -5px; margin-bottom: 15px;">
+                    <span id="auth-forgot-link" style="color: #667781; font-size: 13px; cursor: pointer; text-decoration: underline; font-weight: 500;">Forgot Password?</span>
+                </div>
+
+                <button type="button" id="auth-submit-btn" class="btn-primary">Register</button>
+            </div>
+
+            <div id="verification-notice-screen" class="hidden" style="text-align: center; padding: 15px 0;">
+                <div style="font-size: 50px; margin-bottom: 10px;">✉️</div>
+                <h3 style="color: #005c4b; margin-bottom: 10px;">Verify Your Email</h3>
+                <p style="font-size: 14px; color: #667781; line-height: 1.5; margin-bottom: 20px;">
+                    A verification link has been sent to your email. Open it to unlock your profile access.
+                </p>
+                <button type="button" id="verification-check-btn" class="btn-primary" style="background: #00a884;">I Have Verified My Email</button>
+            </div>
+
+            <p id="toggle-container" style="margin-top: 20px; text-align: center; font-size: 14px; color: #667781;">
+                <span id="auth-switch-text">Already have an account?</span> 
+                <span id="auth-switch-link" style="color: #00a884; font-weight: bold; cursor: pointer; text-decoration: underline; margin-left: 4px;">Login here</span>
+            </p>
+            
+            <div id="or-separator" style="display: flex; align-items: center; text-align: center; margin: 20px 0; color: #8696a0; font-size: 12px;">
+                <div style="flex: 1; border-bottom: 1px solid #e9edef;"></div>
+                <span style="padding: 0 10px;">OR</span>
+                <div style="flex: 1; border-bottom: 1px solid #e9edef;"></div>
+            </div>
+            
+            <button type="button" id="guest-login-btn" class="btn-secondary-guest">Enter via Guest Mode</button>
+
+            <div class="support-footer">
+                Having issues? <a href="mailto:soulaimanm125@gmail.com?subject=Mwamini%20Chat%20Support%20Request" class="support-link">Contact Support</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInAnonymously, sendEmailVerification, sendPasswordResetEmail, reload } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyBtDMYBR0jcyK-JfgsYtET1SenPngzmQi4",
+          authDomain: "mwamini-chatting-web.firebaseapp.com",
+          projectId: "mwamini-chatting-web",
+          storageBucket: "mwamini-chatting-web.firebasestorage.app",
+          messagingSenderId: "640958885512",
+          appId: "1:640958885512:web:2f9a636acc85534009b93d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let isLoginMode = false; 
+
+        const submitBtn = document.getElementById("auth-submit-btn");
+        const switchLink = document.getElementById("auth-switch-link");
+        const nameGroup = document.getElementById("name-group");
+        const switchText = document.getElementById("auth-switch-text");
+        const errorDisplay = document.getElementById("error-message");
+        const guestBtn = document.getElementById("guest-login-btn");
+        const forgotPasswordContainer = document.getElementById("forgot-password-container");
+        const forgotPasswordLink = document.getElementById("auth-forgot-link");
+        
+        const formFieldsWrapper = document.getElementById("auth-form-fields");
+        const verificationScreen = document.getElementById("verification-notice-screen");
+        const checkVerificationBtn = document.getElementById("verification-check-btn");
+
+        if (switchLink) {
+            switchLink.addEventListener("click", () => {
+                isLoginMode = !isLoginMode;
+                if (errorDisplay) errorDisplay.innerText = "";
+                
+                if (isLoginMode) {
+                    submitBtn.innerText = "Login";
+                    switchLink.innerText = "Register here";
+                    switchText.innerText = "Don't have an account?";
+                    nameGroup.style.display = "none";
+                    forgotPasswordContainer.classList.remove("hidden");
+                } else {
+                    submitBtn.innerText = "Register";
+                    switchLink.innerText = "Login here";
+                    switchText.innerText = "Already have an account?";
+                    nameGroup.style.display = "block";
+                    forgotPasswordContainer.classList.add("hidden");
+                }
+            });
+        }
+
+        if (forgotPasswordLink) {
+            forgotPasswordLink.addEventListener("click", async () => {
+                const emailVal = document.getElementById("auth-email").value.trim();
+                if (!emailVal) {
+                    errorDisplay.innerText = "Please type your email address above to receive a reset link.";
+                    errorDisplay.style.color = "#ea0038";
+                    return;
+                }
+                errorDisplay.innerText = "Transmitting reset instructions safely...";
+                errorDisplay.style.color = "#005c4b";
+                try {
+                    await sendPasswordResetEmail(auth, emailVal);
+                    errorDisplay.innerText = "A password reset link has been dispatched to your inbox.";
+                    errorDisplay.style.color = "#00a884";
+                } catch (err) {
+                    errorDisplay.innerText = err.message.replace("Firebase: ", "");
+                    errorDisplay.style.color = "#ea0038";
+                }
+            });
+        }
+
+        if (submitBtn) {
+            submitBtn.addEventListener("click", async () => {
+                const email = document.getElementById("auth-email").value.trim();
+                const password = document.getElementById("auth-password").value.trim();
+                const name = document.getElementById("auth-name") ? document.getElementById("auth-name").value.trim() : "";
+
+                if (errorDisplay) {
+                    errorDisplay.innerText = "Connecting to authorization pool...";
+                    errorDisplay.style.color = "#005c4b";
+                }
+
+                if (!email || !password || (!isLoginMode && !name)) {
+                    errorDisplay.innerText = "Please fill out all visible fields carefully.";
+                    errorDisplay.style.color = "#ea0038";
+                    return;
+                }
+
+                try {
+                    if (isLoginMode) {
+                        const credential = await signInWithEmailAndPassword(auth, email, password);
+                        
+                        if (!credential.user.emailVerified) {
+                            errorDisplay.innerText = "Please complete your email verification step to connect.";
+                            errorDisplay.style.color = "#ea0038";
+                            showVerificationInterface();
+                            return;
+                        }
+                        
+                        saveSessionAndRedirect(credential.user.uid, email.split("@")[0]);
+                    } else {
+                        const credential = await createUserWithEmailAndPassword(auth, email, password);
+                        await sendEmailVerification(credential.user);
+                        
+                        await setDoc(doc(db, "users", credential.user.uid), {
+                            uid: credential.user.uid,
+                            name: name,
+                            email: email,
+                            status: "Available",
+                            accountMode: "standard",
+                            isOnline: false
+                        });
+
+                        errorDisplay.innerText = "Verification link sent! Please check your email.";
+                        errorDisplay.style.color = "#005c4b";
+                        showVerificationInterface();
+                    }
+                } catch (err) {
+                    errorDisplay.innerText = err.message.replace("Firebase: ", "");
+                    errorDisplay.style.color = "#ea0038";
+                }
+            });
+        }
+
+        if (checkVerificationBtn) {
+            checkVerificationBtn.addEventListener("click", async () => {
+                if (auth.currentUser) {
+                    await reload(auth.currentUser);
+                    if (auth.currentUser.emailVerified) {
+                        saveSessionAndRedirect(auth.currentUser.uid, auth.currentUser.email.split("@")[0]);
+                    } else {
+                        errorDisplay.innerText = "Verification unchecked. Please open the link inside your email inbox.";
+                        errorDisplay.style.color = "#ea0038";
+                    }
+                }
+            });
+        }
+
+        if (guestBtn) {
+            guestBtn.addEventListener("click", async () => {
+                if (errorDisplay) {
+                    errorDisplay.innerText = "Allocating secure guest identity...";
+                    errorDisplay.style.color = "#005c4b";
+                }
+                try {
+                    const credential = await signInAnonymously(auth);
+                    const guestUserTag = "GUEST_" + credential.user.uid.substring(0, 5).toUpperCase();
+                    
+                    await setDoc(doc(db, "users", credential.user.uid), {
+                        uid: credential.user.uid,
+                        name: guestUserTag,
+                        email: "guest@mwamini.local",
+                        status: "Exploring under temporary guest mode.",
+                        accountMode: "standard",
+                        isOnline: true
+                    });
+                    saveSessionAndRedirect(credential.user.uid, guestUserTag);
+                } catch (err) {
+                    errorDisplay.innerText = "Guest allocation restricted: " + err.message;
+                    errorDisplay.style.color = "#ea0038";
+                }
+            });
+        }
+
+        function showVerificationInterface() {
+            formFieldsWrapper.classList.add("hidden");
+            verificationScreen.classList.remove("hidden");
+            document.getElementById("or-separator").classList.add("hidden");
+            guestBtn.classList.add("hidden");
+            document.getElementById("toggle-container").classList.add("hidden");
+        }
+
+        function saveSessionAndRedirect(uid, displayName) {
+            localStorage.setItem("session_uid", uid);
+            localStorage.setItem("session_name", displayName);
+            localStorage.setItem("session_account_mode", "standard");
+            window.location.href = "dashboard.html";
+        }
+    </script>
+</body>
+</html>
