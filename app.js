@@ -1,263 +1,360 @@
-// ========================================================
-// SUPABASE REALTIME WORKSPACE IMPLEMENTATION (SQL MIGRATED)
-// ========================================================
-
-const SUPABASE_URL = "https://flricibvmgkmtkptzwck.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZscmljaWJ2bWdrbXRrcHR6d2NrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2Mzg5NzIsImV4cCI6MjA5NzIxNDk3Mn0.XIBhapnKgGSE3m15Q5AJYN8lkekdfeFrlLbEGQ5ul-M";
-
-window.supabase = window.supabase || window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const supabase = window.supabase;
+import { supabase } from './config.js';
 
 let currentUser = null; 
-let activeChatId = null;
-let selectedChatObject = null; 
+let activeTargetId = null; // Can be a Room ID or User ID
+let isTargetRoom = false;
 let messageSubscriptionChannel = null;
+let presenceChannel = null;
+const onlineUsers = new Set();
 
 let audioMediaRecorder = null;
 let recordedAudioChunks = [];
 
 async function initDashboardPage() {
-    if (!document.getElementById("users-container") && !document.getElementById("message-form")) return; 
-
-    const savedUid = localStorage.getItem("session_uid");
-    const savedName = localStorage.getItem("session_name");
-
-    if (!savedUid) {
+    // 1. Authenticate Securely
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
         window.location.href = "index.html";
         return; 
     }
 
-    currentUser = { uid: savedUid, name: savedName };
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    if (!profile) return;
+    
+    currentUser = profile;
+    document.getElementById("current-user-title").textContent = currentUser.name;
+    document.getElementById("my-status-display").textContent = currentUser.status_text;
 
-    // Broadcast Online Presence
-    await supabase.from("users").update({ is_online: true, last_seen: new Date().toISOString() }).eq("uid", currentUser.uid);
+    // 2. Setup Presence (replaces Postgres boolean pinging)
+    setupPresence();
 
-    // Keep UI Header names in sync dynamically
-    supabase
-        .channel(`public:users:uid=eq.${currentUser.uid}`)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `uid=eq.${currentUser.uid}` }, payload => {
-            if(document.getElementById("current-user-title")) document.getElementById("current-user-title").innerText = payload.new.name;
-            if(document.getElementById("my-status-display")) document.getElementById("my-status-display").innerText = payload.new.status_text || "Available";
-        }).subscribe();
+    // 3. UI Event Bindings
+    bindGroupCreation();
+    bindStatusUpdate();
+    bindSearch();
+    bindMessaging();
+    bindVoiceRecording();
+    
+    document.getElementById("logout-btn").addEventListener("click", async () => {
+        await supabase.auth.signOut();
+        window.location.href = "index.html";
+    });
 
-    // --- INSTANT GROUP CREATION (Normalized) ---
-    const createGroupActionBtn = document.getElementById("create-group-btn");
-    if (createGroupActionBtn) {
-        createGroupActionBtn.addEventListener("click", async () => {
-            const groupNameInput = document.getElementById("group-name-input");
-            const title = groupNameInput ? groupNameInput.value.trim() : "";
+    // Initial Load
+    executeTargetSearchQuery(""); 
+}
 
-            if (!title) return alert("Please declare a room name.");
+function setupPresence() {
+    presenceChannel = supabase.channel('global-presence', {
+        config: { presence: { key: currentUser.id } }
+    });
 
-            try {
-                // 1. Create the Chat Record
-                const { data: chatData, error: chatError } = await supabase.from("chats").insert([{
-                    is_group: true,
-                    group_name: title,
-                    created_by: currentUser.uid
-                }]).select().single();
-
-                if (chatError) throw chatError;
-
-                // 2. Add creator as Admin in chat_members
-                await supabase.from("chat_members").insert([{
-                    chat_id: chatData.id,
-                    user_id: currentUser.uid,
-                    role: 'admin'
-                }]);
-
-                alert(`Group "${title}" created successfully!`);
-                if(groupNameInput) groupNameInput.value = "";
-                executeTargetSearchQuery(""); 
-            } catch (err) {
-                alert("Room composition failure: " + err.message);
+    presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+            const state = presenceChannel.presenceState();
+            onlineUsers.clear();
+            for (const id in state) {
+                onlineUsers.add(state[id][0].user_id);
+            }
+            updateSidebarPresenceUI();
+        })
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await presenceChannel.track({ user_id: currentUser.id, status: currentUser.status_text });
             }
         });
-    }
+}
 
-    // --- 72-HOUR STATUS UPDATES ---
-    const updateStatusBtn = document.getElementById("update-status-btn");
-    if (updateStatusBtn) {
-        updateStatusBtn.addEventListener("click", async () => {
-            const statusInput = document.getElementById("status-input");
-            if(!statusInput || !statusInput.value.trim()) return;
+function updateSidebarPresenceUI() {
+    document.querySelectorAll('.wa-user-item').forEach(el => {
+        const uid = el.dataset.uid;
+        if (!uid || el.dataset.isRoom === "true") return;
+        
+        const dot = el.querySelector('.presence-dot');
+        if (dot) {
+            if (onlineUsers.has(uid)) {
+                dot.classList.replace('badge-offline', 'badge-online');
+            } else {
+                dot.classList.replace('badge-online', 'badge-offline');
+            }
+        }
+    });
+}
 
-            await supabase.from("status_updates").insert([{
-                user_id: currentUser.uid,
-                type: 'text',
-                content: statusInput.value.trim()
-                // expires_at is automatically handled by Postgres default (+72 hours)
+function bindGroupCreation() {
+    const typeSelect = document.getElementById("group-type-select");
+    const passwordField = document.getElementById("group-password-input");
+    
+    typeSelect.addEventListener("change", (e) => {
+        if (e.target.value === "protected") passwordField.classList.remove("hidden");
+        else passwordField.classList.add("hidden");
+    });
+
+    document.getElementById("create-group-btn").addEventListener("click", async () => {
+        const title = document.getElementById("group-name-input").value.trim();
+        const type = typeSelect.value;
+        const pass = passwordField.value.trim();
+
+        if (!title) return alert("Please declare a room name.");
+        
+        try {
+            await supabase.from("rooms").insert([{
+                name: title,
+                group_type: type,
+                passcode: pass,
+                created_by: currentUser.id
             }]);
-            statusInput.value = "";
-            alert("Status posted. It will disappear in 72 hours.");
-        });
-    }
+            
+            document.getElementById("group-name-input").value = "";
+            passwordField.value = "";
+            executeTargetSearchQuery(""); 
+        } catch (err) {
+            alert("Room composition failure: " + err.message);
+        }
+    });
+}
 
-    // Initialize Search & Forms
-    const searchField = document.getElementById("search-users");
-    if (searchField) {
-        searchField.addEventListener("input", (e) => executeTargetSearchQuery(e.target.value.trim()));
-    }
-    executeTargetSearchQuery(""); 
+function bindStatusUpdate() {
+    document.getElementById("update-status-btn").addEventListener("click", async () => {
+        const status = document.getElementById("status-input").value.trim();
+        if (!status) return;
+        
+        await supabase.from("profiles").update({ status_text: status }).eq("id", currentUser.id);
+        document.getElementById("my-status-display").textContent = status;
+        document.getElementById("status-input").value = "";
+        
+        if (presenceChannel) {
+            await presenceChannel.track({ user_id: currentUser.id, status: status });
+        }
+    });
+}
 
-    const messageForm = document.getElementById("message-form");
-    if (messageForm) {
-        messageForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const input = document.getElementById("message-input");
-            const isDisappearingMode = document.getElementById("disappearing-toggle")?.checked || false;
-
-            if (!input || !input.value.trim() || !activeChatId) return;
-
-            const text = input.value.trim();
-            input.value = "";
-
-            await supabase.from("messages").insert([{
-                chat_id: activeChatId,
-                text: text,
-                type: "text",
-                sender_id: currentUser.uid,
-                is_disappearing: isDisappearingMode
-            }]);
-        });
-    }
+function bindSearch() {
+    document.getElementById("search-users").addEventListener("input", (e) => {
+        executeTargetSearchQuery(e.target.value.trim());
+    });
 }
 
 async function executeTargetSearchQuery(keyword) {
-    const listCanvas = document.getElementById("users-container");
-    if (!listCanvas) return;
-    listCanvas.innerHTML = "";
-
-    let { data: usersList } = await supabase.from("users").select("*").ilike("name", `%${keyword}%`);
-    let { data: groupsList } = await supabase.from("chats").select("*").eq("is_group", true).ilike("group_name", `%${keyword}%`);
-
-    if (groupsList) groupsList.forEach(group => buildSidebarRow(group, true));
-    if (usersList) {
-        usersList.forEach(user => {
-            if(user.uid !== currentUser.uid) buildSidebarRow(user, false);
-        });
-    }
-}
-
-function buildSidebarRow(data, isGroup) {
     const canvas = document.getElementById("users-container");
-    let rowElement = document.createElement("div");
-    rowElement.style = "display:flex; align-items:center; padding:12px 16px; cursor:pointer; border-bottom:1px solid #f8f9fa;";
+    canvas.innerHTML = "";
 
-    const displayName = isGroup ? data.group_name : data.name;
-    const initial = isGroup ? '👥' : displayName.charAt(0).toUpperCase();
+    // 1. Fetch Rooms
+    let roomQuery = supabase.from("rooms").select("*");
+    if (keyword) roomQuery = roomQuery.ilike("name", `%${keyword}%`);
+    const { data: rooms } = await roomQuery;
 
-    rowElement.innerHTML = `
-        <div style="background:#00a884; color:white; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:18px; margin-right: 12px;">
-            ${initial}
-        </div>
-        <div style="flex:1;">
-            <h4 style="margin:0; font-size:14px; color:#111b21;">${displayName}</h4>
-        </div>
-    `;
+    rooms?.forEach(room => buildSidebarItem(room, true));
 
-    rowElement.addEventListener("click", async () => {
-        // Logic to ensure a 1-on-1 chat record exists if clicking a user
-        if (!isGroup) {
-            // Find existing chat or create new
-            const { data: existingChat } = await supabase.rpc('get_direct_chat', { user1: currentUser.uid, user2: data.uid });
-            if (existingChat) {
-                activeChatId = existingChat;
-            } else {
-                const { data: newChat } = await supabase.from('chats').insert([{ is_group: false }]).select().single();
-                await supabase.from('chat_members').insert([
-                    { chat_id: newChat.id, user_id: currentUser.uid },
-                    { chat_id: newChat.id, user_id: data.uid }
-                ]);
-                activeChatId = newChat.id;
-            }
-        } else {
-            activeChatId = data.id;
-        }
+    // 2. Fetch Users
+    let userQuery = supabase.from("profiles").select("*").neq("id", currentUser.id);
+    if (keyword) userQuery = userQuery.ilike("name", `%${keyword}%`);
+    const { data: users } = await userQuery;
 
-        document.getElementById("no-chat-selected").classList.add("hidden");
-        document.getElementById("active-chat-area").classList.remove("hidden");
-        document.getElementById("chat-header-name").innerText = displayName;
-
-        bindLiveIsolatedMessageStreams(activeChatId);
-    });
-    
-    canvas.appendChild(rowElement);
+    users?.forEach(user => buildSidebarItem(user, false));
+    updateSidebarPresenceUI();
 }
 
-function bindLiveIsolatedMessageStreams(chatId) {
+function buildSidebarItem(data, isRoom) {
+    const canvas = document.getElementById("users-container");
+    const row = document.createElement("div");
+    row.className = "wa-user-item";
+    row.dataset.uid = data.id;
+    row.dataset.isRoom = isRoom;
+
+    const avatarBox = document.createElement("div");
+    avatarBox.className = "wa-avatar-container";
+    
+    const avatar = document.createElement("div");
+    avatar.className = "wa-avatar";
+    avatar.style.background = isRoom ? '#008069' : '#00a884';
+    avatar.textContent = isRoom ? '👥' : data.name.charAt(0).toUpperCase();
+    
+    avatarBox.appendChild(avatar);
+
+    if (!isRoom) {
+        const dot = document.createElement("div");
+        dot.className = "presence-dot badge-offline";
+        avatarBox.appendChild(dot);
+    }
+
+    const infoBox = document.createElement("div");
+    infoBox.className = "wa-user-info";
+
+    const nameEl = document.createElement("h4");
+    nameEl.textContent = data.name; // Secure text insertion
+
+    const subEl = document.createElement("p");
+    subEl.className = "wa-user-status-text";
+    subEl.textContent = isRoom ? (data.group_type === "protected" ? "🔒 Protected" : "🌐 Public") : (data.status_text || 'Available');
+
+    infoBox.appendChild(nameEl);
+    infoBox.appendChild(subEl);
+    row.appendChild(avatarBox);
+    row.appendChild(infoBox);
+
+    row.addEventListener("click", () => openChat(data.id, data.name, isRoom, data));
+    canvas.appendChild(row);
+}
+
+function openChat(id, name, isRoom, fullData) {
+    if (isRoom && fullData.group_type === "protected") {
+        const pass = prompt(`Enter password to access "${name}":`);
+        if (pass !== fullData.passcode) {
+            alert("Authorization Denied.");
+            return;
+        }
+    }
+
+    activeTargetId = id;
+    isTargetRoom = isRoom;
+
+    document.getElementById("no-chat-selected").classList.add("hidden");
+    document.getElementById("active-chat-area").classList.remove("hidden");
+    document.getElementById("chat-header-name").textContent = name;
+    document.getElementById("chat-header-group-meta").textContent = isRoom ? "CHANNEL" : "DIRECT MESSAGE";
+
+    bindLiveMessageStream();
+}
+
+async function bindLiveMessageStream() {
     if (messageSubscriptionChannel) supabase.removeChannel(messageSubscriptionChannel);
+    
+    const chatBox = document.getElementById("message-stream");
+    chatBox.innerHTML = "";
 
-    const chatBoxWindow = document.getElementById("message-stream");
-    chatBoxWindow.innerHTML = "";
+    // Load History
+    let query = supabase.from("messages").select("*, profiles(name)").order("created_at", { ascending: true });
+    
+    if (isTargetRoom) {
+        query = query.eq("room_id", activeTargetId);
+    } else {
+        // Complex OR clause for direct messaging
+        query = query.or(`and(sender_id.eq.${currentUser.id},recipient_id.eq.${activeTargetId}),and(sender_id.eq.${activeTargetId},recipient_id.eq.${currentUser.id})`);
+    }
 
-    // 1. Fetch history
-    supabase.from("messages").select("*, users(name)").eq("chat_id", chatId).order("created_at", { ascending: true })
-        .then(({ data }) => {
-            if(data) {
-                data.forEach(msg => renderSingleMessageBubble(msg));
-                markMessagesAsSeen(data); // Trigger the 3-minute countdown for unread disappearing messages
-            }
-        });
+    const { data } = await query;
+    data?.forEach(renderMessage);
 
-    // 2. Subscribe to live stream
+    // Live Subscribe
+    let filterStr = isTargetRoom ? `room_id=eq.${activeTargetId}` : '';
+    
     messageSubscriptionChannel = supabase
-        .channel(`room:${chatId}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, payload => {
-            // Fetch sender name joined data manually since realtime payload lacks relations
-            supabase.from('users').select('name').eq('uid', payload.new.sender_id).single().then(({data}) => {
-                payload.new.users = data;
-                renderSingleMessageBubble(payload.new);
-                if (payload.new.sender_id !== currentUser.uid && payload.new.is_disappearing) {
-                    markMessagesAsSeen([payload.new]);
-                }
-            });
-        })
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, payload => {
-            // Handle visual removal of expiring messages triggered by pg_cron
-            const bubble = document.getElementById(`msg-${payload.old.id}`);
-            if(bubble) bubble.remove();
+        .channel(`chat:${activeTargetId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: filterStr }, async (payload) => {
+            const msg = payload.new;
+            // Filter DMs client side if no strict pg filter
+            if (!isTargetRoom && (msg.sender_id !== activeTargetId && msg.recipient_id !== activeTargetId)) return;
+            
+            const { data: sender } = await supabase.from('profiles').select('name').eq('id', msg.sender_id).single();
+            msg.profiles = sender;
+            renderMessage(msg);
         })
         .subscribe();
 }
 
-async function markMessagesAsSeen(messages) {
-    const unreadDisappearingIds = messages
-        .filter(m => m.is_disappearing && m.sender_id !== currentUser.uid && !m.seen_at)
-        .map(m => m.id);
+function renderMessage(data) {
+    const chatBox = document.getElementById("message-stream");
+    const isMe = data.sender_id === currentUser.id;
+    
+    const row = document.createElement("div");
+    row.className = `wa-message-row ${isMe ? 'row-sent' : 'row-received'}`;
+    
+    const bubble = document.createElement("div");
+    bubble.className = "wa-bubble";
 
-    if (unreadDisappearingIds.length > 0) {
-        await supabase
-            .from('messages')
-            .update({ seen_at: new Date().toISOString() })
-            .in('id', unreadDisappearingIds);
+    if (!isMe && isTargetRoom) {
+        const senderLabel = document.createElement("div");
+        senderLabel.style.fontWeight = "bold";
+        senderLabel.style.color = "#008069";
+        senderLabel.style.fontSize = "11px";
+        senderLabel.style.marginBottom = "4px";
+        senderLabel.textContent = data.profiles?.name || "Unknown";
+        bubble.appendChild(senderLabel);
     }
+
+    if (data.type === "audio") {
+        const audio = document.createElement("audio");
+        audio.src = data.file_url;
+        audio.controls = true;
+        bubble.appendChild(audio);
+    } else {
+        const textLabel = document.createElement("div");
+        textLabel.className = "bubble-text";
+        textLabel.textContent = data.text; // Native XSS Protection
+        bubble.appendChild(textLabel);
+    }
+
+    row.appendChild(bubble);
+    chatBox.appendChild(row);
+    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-function renderSingleMessageBubble(data) {
-    const chatBoxWindow = document.getElementById("message-stream");
-    const bubbleRow = document.createElement("div");
-    const isMe = data.sender_id === currentUser.uid;
-    bubbleRow.id = `msg-${data.id}`;
-    
-    bubbleRow.style = `display:flex; justify-content:${isMe ? 'flex-end' : 'flex-start'}; margin-bottom:12px;`;
-    
-    let content = data.type === "audio" 
-        ? `<audio src="${data.file_url}" controls style="max-width:250px;"></audio>`
-        : `<p style="margin:0; font-size:14px; color:#111b21;">${data.text}</p>`;
+function bindMessaging() {
+    document.getElementById("message-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const input = document.getElementById("message-input");
+        const text = input.value.trim();
+        if (!text || !activeTargetId) return;
 
-    let disappearingIcon = data.is_disappearing ? `<span style="font-size:10px; color:#ea0038;"> ⏱️ (3m)</span>` : '';
-
-    bubbleRow.innerHTML = `
-        <div style="background:${isMe ? '#d9fdd3' : '#ffffff'}; padding:9px 14px; border-radius:10px; max-width:68%;">
-            <div style="font-size:11px; margin-bottom:3px; font-weight:bold; color:#008069;">
-                ${data.users?.name || 'Unknown'} ${disappearingIcon}
-            </div>
-            ${content}
-        </div>`;
+        input.value = "";
         
-    chatBoxWindow.appendChild(bubbleRow);
-    chatBoxWindow.scrollTop = chatBoxWindow.scrollHeight;
+        const payload = {
+            sender_id: currentUser.id,
+            text: text,
+            type: "text"
+        };
+        
+        if (isTargetRoom) payload.room_id = activeTargetId;
+        else payload.recipient_id = activeTargetId;
+
+        await supabase.from("messages").insert([payload]);
+    });
+}
+
+function bindVoiceRecording() {
+    const btn = document.getElementById("voice-record-btn");
+    const status = document.getElementById("voice-recording-status");
+
+    btn.addEventListener("click", async () => {
+        if (!activeTargetId) return;
+        
+        if (!audioMediaRecorder) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioMediaRecorder = new MediaRecorder(stream);
+                audioMediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedAudioChunks.push(e.data); };
+                audioMediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(recordedAudioChunks, { type: "audio/ogg; codecs=opus" });
+                    recordedAudioChunks = [];
+                    status.classList.add("hidden");
+                    btn.style.color = "initial";
+
+                    const filePath = `memos/${currentUser.id}_${Date.now()}.ogg`;
+                    const { error } = await supabase.storage.from('chat-media').upload(filePath, audioBlob);
+                    
+                    if (!error) {
+                        const { data } = supabase.storage.from('chat-media').getPublicUrl(filePath);
+                        const payload = { sender_id: currentUser.id, file_url: data.publicUrl, type: "audio" };
+                        if (isTargetRoom) payload.room_id = activeTargetId;
+                        else payload.recipient_id = activeTargetId;
+                        
+                        await supabase.from("messages").insert([payload]);
+                    }
+                };
+            } catch (err) {
+                return alert("Audio device access denied.");
+            }
+        }
+
+        if (audioMediaRecorder.state === "inactive") {
+            audioMediaRecorder.start();
+            status.classList.remove("hidden");
+            btn.style.color = "#ea0038";
+        } else {
+            audioMediaRecorder.stop();
+        }
+    });
 }
 
 document.addEventListener("DOMContentLoaded", initDashboardPage);
