@@ -22,6 +22,7 @@
         .support-link { color: #005c4b; font-weight: bold; text-decoration: none; margin-left: 3px; cursor: pointer; }
         .support-link:hover { text-decoration: underline; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -78,23 +79,10 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInAnonymously, sendEmailVerification, sendPasswordResetEmail, reload } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        const SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co";
+        const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
 
-        const firebaseConfig = {
-          apiKey: "AIzaSyBtDMYBR0jcyK-JfgsYtET1SenPngzmQi4",
-          authDomain: "mwamini-chatting-web.firebaseapp.com",
-          projectId: "mwamini-chatting-web",
-          storageBucket: "mwamini-chatting-web.firebasestorage.app",
-          messagingSenderId: "640958885512",
-          appId: "1:640958885512:web:2f9a636acc85534009b93d"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let isLoginMode = false; 
 
         const submitBtn = document.getElementById("auth-submit-btn");
@@ -114,7 +102,6 @@
             switchLink.addEventListener("click", () => {
                 isLoginMode = !isLoginMode;
                 if (errorDisplay) errorDisplay.innerText = "";
-                
                 if (isLoginMode) {
                     submitBtn.innerText = "Login";
                     switchLink.innerText = "Register here";
@@ -127,27 +114,6 @@
                     switchText.innerText = "Already have an account?";
                     nameGroup.style.display = "block";
                     forgotPasswordContainer.classList.add("hidden");
-                }
-            });
-        }
-
-        if (forgotPasswordLink) {
-            forgotPasswordLink.addEventListener("click", async () => {
-                const emailVal = document.getElementById("auth-email").value.trim();
-                if (!emailVal) {
-                    errorDisplay.innerText = "Please type your email address above to receive a reset link.";
-                    errorDisplay.style.color = "#ea0038";
-                    return;
-                }
-                errorDisplay.innerText = "Transmitting reset instructions safely...";
-                errorDisplay.style.color = "#005c4b";
-                try {
-                    await sendPasswordResetEmail(auth, emailVal);
-                    errorDisplay.innerText = "A password reset link has been dispatched to your inbox.";
-                    errorDisplay.style.color = "#00a884";
-                } catch (err) {
-                    errorDisplay.innerText = err.message.replace("Firebase: ", "");
-                    errorDisplay.style.color = "#ea0038";
                 }
             });
         }
@@ -169,51 +135,38 @@
                     return;
                 }
 
-                try {
-                    if (isLoginMode) {
-                        const credential = await signInWithEmailAndPassword(auth, email, password);
-                        
-                        if (!credential.user.emailVerified) {
-                            errorDisplay.innerText = "Please complete your email verification step to connect.";
-                            errorDisplay.style.color = "#ea0038";
-                            showVerificationInterface();
-                            return;
-                        }
-                        
-                        saveSessionAndRedirect(credential.user.uid, email.split("@")[0]);
-                    } else {
-                        const credential = await createUserWithEmailAndPassword(auth, email, password);
-                        await sendEmailVerification(credential.user);
-                        
-                        await setDoc(doc(db, "users", credential.user.uid), {
-                            uid: credential.user.uid,
+                if (isLoginMode) {
+                    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                    if (error) {
+                        errorDisplay.innerText = error.message;
+                        errorDisplay.style.color = "#ea0038";
+                        return;
+                    }
+                    if (data.user && !data.user.confirmed_at) {
+                        errorDisplay.innerText = "Please complete your email verification step to connect.";
+                        errorDisplay.style.color = "#ea0038";
+                        showVerificationInterface();
+                        return;
+                    }
+                    const { data: profile } = await supabase.from('users').select('name').eq('uid', data.user.id).single();
+                    saveSessionAndRedirect(data.user.id, profile ? profile.name : email.split("@")[0]);
+                } else {
+                    const { data, error } = await supabase.auth.signUp({ email, password });
+                    if (error) {
+                        errorDisplay.innerText = error.message;
+                        errorDisplay.style.color = "#ea0038";
+                        return;
+                    }
+                    if (data.user) {
+                        await supabase.from("users").insert([{
+                            uid: data.user.id,
                             name: name,
                             email: email,
                             status: "Available",
-                            accountMode: "standard",
-                            isOnline: false
-                        });
-
-                        errorDisplay.innerText = "Verification link sent! Please check your email.";
-                        errorDisplay.style.color = "#005c4b";
+                            account_mode: "standard",
+                            is_online: false
+                        }]);
                         showVerificationInterface();
-                    }
-                } catch (err) {
-                    errorDisplay.innerText = err.message.replace("Firebase: ", "");
-                    errorDisplay.style.color = "#ea0038";
-                }
-            });
-        }
-
-        if (checkVerificationBtn) {
-            checkVerificationBtn.addEventListener("click", async () => {
-                if (auth.currentUser) {
-                    await reload(auth.currentUser);
-                    if (auth.currentUser.emailVerified) {
-                        saveSessionAndRedirect(auth.currentUser.uid, auth.currentUser.email.split("@")[0]);
-                    } else {
-                        errorDisplay.innerText = "Verification unchecked. Please open the link inside your email inbox.";
-                        errorDisplay.style.color = "#ea0038";
                     }
                 }
             });
@@ -221,26 +174,22 @@
 
         if (guestBtn) {
             guestBtn.addEventListener("click", async () => {
-                if (errorDisplay) {
-                    errorDisplay.innerText = "Allocating secure guest identity...";
-                    errorDisplay.style.color = "#005c4b";
+                const { data, error } = await supabase.auth.signInAnonymously();
+                if (error) {
+                    errorDisplay.innerText = "Guest restricted: " + error.message;
+                    return;
                 }
-                try {
-                    const credential = await signInAnonymously(auth);
-                    const guestUserTag = "GUEST_" + credential.user.uid.substring(0, 5).toUpperCase();
-                    
-                    await setDoc(doc(db, "users", credential.user.uid), {
-                        uid: credential.user.uid,
+                if (data.user) {
+                    const guestUserTag = "GUEST_" + data.user.id.substring(0, 5).toUpperCase();
+                    await supabase.from("users").insert([{
+                        uid: data.user.id,
                         name: guestUserTag,
                         email: "guest@mwamini.local",
                         status: "Exploring under temporary guest mode.",
-                        accountMode: "standard",
-                        isOnline: true
-                    });
-                    saveSessionAndRedirect(credential.user.uid, guestUserTag);
-                } catch (err) {
-                    errorDisplay.innerText = "Guest allocation restricted: " + err.message;
-                    errorDisplay.style.color = "#ea0038";
+                        account_mode: "standard",
+                        is_online: true
+                    }]);
+                    saveSessionAndRedirect(data.user.id, guestUserTag);
                 }
             });
         }
@@ -248,15 +197,11 @@
         function showVerificationInterface() {
             formFieldsWrapper.classList.add("hidden");
             verificationScreen.classList.remove("hidden");
-            document.getElementById("or-separator").classList.add("hidden");
-            guestBtn.classList.add("hidden");
-            document.getElementById("toggle-container").classList.add("hidden");
         }
 
         function saveSessionAndRedirect(uid, displayName) {
             localStorage.setItem("session_uid", uid);
             localStorage.setItem("session_name", displayName);
-            localStorage.setItem("session_account_mode", "standard");
             window.location.href = "dashboard.html";
         }
     </script>
