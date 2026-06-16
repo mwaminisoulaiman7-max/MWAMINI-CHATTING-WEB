@@ -4,206 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MWAMINI CHAT WEB</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        body { background-color: #008069; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-        .auth-container { width: 100%; max-width: 450px; }
-        .auth-card { background: #ffffff; padding: 40px 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); width: 100%; }
-        .input-group { margin-bottom: 16px; }
-        .input-group input { width: 100%; padding: 14px; border: 1px solid #cccccc; border-radius: 6px; font-size: 15px; outline: none; transition: border-color 0.2s; background-color: #f8f9fa; }
-        .input-group input:focus { border-color: #008069; background-color: #ffffff; }
-        .btn-primary { width: 100%; background: #005c4b; color: white; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
-        .btn-primary:hover { background: #004d3e; }
-        .btn-secondary-guest { width: 100%; background: transparent; color: #005c4b; border: 2px dashed #005c4b; padding: 12px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 15px; transition: background 0.2s; }
-        .btn-secondary-guest:hover { background: rgba(0, 92, 75, 0.04); }
-        .hidden { display: none !important; }
-        #error-message { min-height: 22px; font-size: 13px; font-weight: bold; text-align: center; margin-bottom: 15px; line-height: 1.4; color: #ea0038; }
-        .support-footer { margin-top: 25px; padding-top: 15px; border-top: 1px solid #e9edef; text-align: center; font-size: 13px; color: #667781; }
-        .support-link { color: #005c4b; font-weight: bold; text-decoration: none; margin-left: 3px; cursor: pointer; }
-        .support-link:hover { text-decoration: underline; }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="./style.css">
 </head>
-<body>
-
+<body class="auth-body">
     <div class="auth-container">
         <div class="auth-card">
-            <h2 style="text-align: center; color: #005c4b; font-weight: 800; margin-bottom: 15px; letter-spacing: 0.3px;">MWAMINI CHAT WEB</h2>
+            <h2 class="brand-title">MWAMINI CHAT WEB</h2>
             
-            <p id="error-message"></p>
+            <p id="error-message" class="error-text"></p>
 
-            <div id="auth-form-fields">
+            <form id="auth-form-fields">
                 <div class="input-group" id="name-group">
                     <input type="text" id="auth-name" placeholder="Full Name">
                 </div>
                 <div class="input-group">
-                    <input type="email" id="auth-email" placeholder="Email Address">
+                    <input type="email" id="auth-email" placeholder="Email Address" required>
                 </div>
                 <div class="input-group">
-                    <input type="password" id="auth-password" placeholder="Password">
+                    <input type="password" id="auth-password" placeholder="Password" required>
                 </div>
                 
-                <div id="forgot-password-container" class="hidden" style="text-align: right; margin-top: -5px; margin-bottom: 15px;">
-                    <span id="auth-forgot-link" style="color: #667781; font-size: 13px; cursor: pointer; text-decoration: underline; font-weight: 500;">Forgot Password?</span>
+                <div id="forgot-password-container" class="hidden" style="text-align: right; margin-bottom: 15px;">
+                    <span id="auth-forgot-link" style="color: #667781; font-size: 13px; cursor: pointer; text-decoration: underline;">Forgot Password?</span>
                 </div>
 
-                <button type="button" id="auth-submit-btn" class="btn-primary">Register</button>
-            </div>
-
-            <div id="verification-notice-screen" class="hidden" style="text-align: center; padding: 15px 0;">
-                <div style="font-size: 50px; margin-bottom: 10px;">✉️</div>
-                <h3 style="color: #005c4b; margin-bottom: 10px;">Verify Your Email</h3>
-                <p style="font-size: 14px; color: #667781; line-height: 1.5; margin-bottom: 20px;">
-                    A verification link has been sent to your email. Open it to unlock your profile access.
-                </p>
-                <button type="button" id="verification-check-btn" class="btn-primary" style="background: #00a884;">I Have Verified My Email</button>
-            </div>
+                <button type="submit" id="auth-submit-btn" class="btn-primary">Register</button>
+            </form>
 
             <p id="toggle-container" style="margin-top: 20px; text-align: center; font-size: 14px; color: #667781;">
                 <span id="auth-switch-text">Already have an account?</span> 
-                <span id="auth-switch-link" style="color: #00a884; font-weight: bold; cursor: pointer; text-decoration: underline; margin-left: 4px;">Login here</span>
+                <span id="auth-switch-link" class="support-link">Login here</span>
             </p>
             
-            <div id="or-separator" style="display: flex; align-items: center; text-align: center; margin: 20px 0; color: #8696a0; font-size: 12px;">
-                <div style="flex: 1; border-bottom: 1px solid #e9edef;"></div>
-                <span style="padding: 0 10px;">OR</span>
-                <div style="flex: 1; border-bottom: 1px solid #e9edef;"></div>
+            <div class="or-separator">
+                <div class="line"></div>
+                <span>OR</span>
+                <div class="line"></div>
             </div>
             
             <button type="button" id="guest-login-btn" class="btn-secondary-guest">Enter via Guest Mode</button>
 
             <div class="support-footer">
-                Having issues? <a href="mailto:soulaimanm125@gmail.com?subject=Mwamini%20Chat%20Support%20Request" class="support-link">Contact Support</a>
+                Having issues? <a href="mailto:support@example.com" class="support-link">Contact Support</a>
             </div>
         </div>
     </div>
-
-    <script type="module">
-        const SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co";
-        const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
-
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        let isLoginMode = false; 
-
-        const submitBtn = document.getElementById("auth-submit-btn");
-        const switchLink = document.getElementById("auth-switch-link");
-        const nameGroup = document.getElementById("name-group");
-        const switchText = document.getElementById("auth-switch-text");
-        const errorDisplay = document.getElementById("error-message");
-        const guestBtn = document.getElementById("guest-login-btn");
-        const forgotPasswordContainer = document.getElementById("forgot-password-container");
-        const forgotPasswordLink = document.getElementById("auth-forgot-link");
-        
-        const formFieldsWrapper = document.getElementById("auth-form-fields");
-        const verificationScreen = document.getElementById("verification-notice-screen");
-        const checkVerificationBtn = document.getElementById("verification-check-btn");
-
-        if (switchLink) {
-            switchLink.addEventListener("click", () => {
-                isLoginMode = !isLoginMode;
-                if (errorDisplay) errorDisplay.innerText = "";
-                if (isLoginMode) {
-                    submitBtn.innerText = "Login";
-                    switchLink.innerText = "Register here";
-                    switchText.innerText = "Don't have an account?";
-                    nameGroup.style.display = "none";
-                    forgotPasswordContainer.classList.remove("hidden");
-                } else {
-                    submitBtn.innerText = "Register";
-                    switchLink.innerText = "Login here";
-                    switchText.innerText = "Already have an account?";
-                    nameGroup.style.display = "block";
-                    forgotPasswordContainer.classList.add("hidden");
-                }
-            });
-        }
-
-        if (submitBtn) {
-            submitBtn.addEventListener("click", async () => {
-                const email = document.getElementById("auth-email").value.trim();
-                const password = document.getElementById("auth-password").value.trim();
-                const name = document.getElementById("auth-name") ? document.getElementById("auth-name").value.trim() : "";
-
-                if (errorDisplay) {
-                    errorDisplay.innerText = "Connecting to authorization pool...";
-                    errorDisplay.style.color = "#005c4b";
-                }
-
-                if (!email || !password || (!isLoginMode && !name)) {
-                    errorDisplay.innerText = "Please fill out all visible fields carefully.";
-                    errorDisplay.style.color = "#ea0038";
-                    return;
-                }
-
-                if (isLoginMode) {
-                    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                    if (error) {
-                        errorDisplay.innerText = error.message;
-                        errorDisplay.style.color = "#ea0038";
-                        return;
-                    }
-                    if (data.user && !data.user.confirmed_at) {
-                        errorDisplay.innerText = "Please complete your email verification step to connect.";
-                        errorDisplay.style.color = "#ea0038";
-                        showVerificationInterface();
-                        return;
-                    }
-                    const { data: profile } = await supabase.from('users').select('name').eq('uid', data.user.id).single();
-                    saveSessionAndRedirect(data.user.id, profile ? profile.name : email.split("@")[0]);
-                } else {
-                    const { data, error } = await supabase.auth.signUp({ email, password });
-                    if (error) {
-                        errorDisplay.innerText = error.message;
-                        errorDisplay.style.color = "#ea0038";
-                        return;
-                    }
-                    if (data.user) {
-                        await supabase.from("users").insert([{
-                            uid: data.user.id,
-                            name: name,
-                            email: email,
-                            status: "Available",
-                            account_mode: "standard",
-                            is_online: false
-                        }]);
-                        showVerificationInterface();
-                    }
-                }
-            });
-        }
-
-        if (guestBtn) {
-            guestBtn.addEventListener("click", async () => {
-                const { data, error } = await supabase.auth.signInAnonymously();
-                if (error) {
-                    errorDisplay.innerText = "Guest restricted: " + error.message;
-                    return;
-                }
-                if (data.user) {
-                    const guestUserTag = "GUEST_" + data.user.id.substring(0, 5).toUpperCase();
-                    await supabase.from("users").insert([{
-                        uid: data.user.id,
-                        name: guestUserTag,
-                        email: "guest@mwamini.local",
-                        status: "Exploring under temporary guest mode.",
-                        account_mode: "standard",
-                        is_online: true
-                    }]);
-                    saveSessionAndRedirect(data.user.id, guestUserTag);
-                }
-            });
-        }
-
-        function showVerificationInterface() {
-            formFieldsWrapper.classList.add("hidden");
-            verificationScreen.classList.remove("hidden");
-        }
-
-        function saveSessionAndRedirect(uid, displayName) {
-            localStorage.setItem("session_uid", uid);
-            localStorage.setItem("session_name", displayName);
-            window.location.href = "dashboard.html";
-        }
-    </script>
+    <script type="module" src="./auth.js"></script>
 </body>
 </html>
