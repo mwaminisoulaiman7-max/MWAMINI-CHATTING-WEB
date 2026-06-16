@@ -1,117 +1,98 @@
-// ========================================================
-// SUPABASE NATIVE AUTHENTICATION GATEWAY
-// ========================================================
+import { supabase } from './config.js';
 
 let isLoginMode = false;
 
-export function initAuthGateway() {
-    const submitBtn = document.getElementById("auth-submit-btn");
-    const switchLink = document.getElementById("auth-switch-link");
-    const nameGroup = document.getElementById("name-group");
-    const switchText = document.getElementById("auth-switch-text");
-    const errorDisplay = document.getElementById("error-message");
-    const guestBtn = document.getElementById("guest-login-btn");
+// UI Elements
+const form = document.getElementById("auth-form-fields");
+const submitBtn = document.getElementById("auth-submit-btn");
+const switchLink = document.getElementById("auth-switch-link");
+const nameGroup = document.getElementById("name-group");
+const switchText = document.getElementById("auth-switch-text");
+const errorDisplay = document.getElementById("error-message");
+const guestBtn = document.getElementById("guest-login-btn");
+const forgotPasswordContainer = document.getElementById("forgot-password-container");
 
-    if (!submitBtn) return;
+// Prevent logged-in users from seeing the auth page
+window.addEventListener('DOMContentLoaded', async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) window.location.href = "dashboard.html";
+});
 
-    // --- INTERFACE MODE VIEW TOGGLE SWITCH ---
-    switchLink.addEventListener("click", () => {
-        isLoginMode = !isLoginMode;
-        errorDisplay.innerText = "";
-        
+switchLink.addEventListener("click", () => {
+    isLoginMode = !isLoginMode;
+    errorDisplay.textContent = "";
+    
+    if (isLoginMode) {
+        submitBtn.textContent = "Login";
+        switchLink.textContent = "Register here";
+        switchText.textContent = "Don't have an account?";
+        nameGroup.classList.add("hidden");
+        forgotPasswordContainer.classList.remove("hidden");
+        document.getElementById("auth-name").removeAttribute("required");
+    } else {
+        submitBtn.textContent = "Register";
+        switchLink.textContent = "Login here";
+        switchText.textContent = "Already have an account?";
+        nameGroup.classList.remove("hidden");
+        forgotPasswordContainer.classList.add("hidden");
+        document.getElementById("auth-name").setAttribute("required", "true");
+    }
+});
+
+form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("auth-email").value.trim();
+    const password = document.getElementById("auth-password").value.trim();
+    const name = document.getElementById("auth-name").value.trim();
+
+    errorDisplay.textContent = "Authenticating...";
+    errorDisplay.style.color = "#005c4b";
+
+    try {
         if (isLoginMode) {
-            submitBtn.innerText = "Login";
-            switchLink.innerText = "Register here";
-            switchText.innerText = "Don't have an account?";
-            nameGroup.style.display = "none";
-        } else {
-            submitBtn.innerText = "Register";
-            switchLink.innerText = "Login here";
-            switchText.innerText = "Already have an account?";
-            nameGroup.style.display = "block";
-        }
-    });
-
-    // --- FORM TRANSACTION HANDLING ROUTINE ---
-    submitBtn.addEventListener("click", async () => {
-        const email = document.getElementById("auth-email").value.trim();
-        const password = document.getElementById("auth-password").value.trim();
-        const name = document.getElementById("auth-name")?.value.trim();
-
-        errorDisplay.innerText = "";
-
-        if (!email || !password || (!isLoginMode && !name)) {
-            errorDisplay.innerText = "Please complete all fields correctly.";
-            return;
-        }
-
-        try {
-            if (isLoginMode) {
-                // 1. Supabase Sign-In
-                const { data, error } = await window.supabase.auth.signInWithPassword({ email, password });
-                if (error) throw error;
-
-                const { data: userProfile } = await window.supabase
-                    .from("users")
-                    .select("name, account_mode")
-                    .eq("uid", data.user.id)
-                    .single();
-
-                const sessionName = userProfile ? userProfile.name : email.split("@")[0];
-                const sessionMode = userProfile ? userProfile.account_mode : "standard";
-
-                saveSessionAndProceed(data.user.id, sessionName, sessionMode);
-            } else {
-                // 2. Supabase Registration
-                const { data, error } = await window.supabase.auth.signUp({ email, password });
-                if (error) throw error;
-
-                // Provision new user profile in public.users table
-                await window.supabase.from("users").insert([{
-                    uid: data.user.id,
-                    name: name,
-                    email: email,
-                    status_text: "Hey there! I am using Mwamini Chat.",
-                    account_mode: "standard",
-                    is_online: true
-                }]);
-
-                saveSessionAndProceed(data.user.id, name, "standard");
-            }
-        } catch (err) {
-            errorDisplay.innerText = err.message;
-        }
-    });
-
-    // --- GUEST AUTHENTICATION ACTION LINK ROUTINE ---
-    guestBtn.addEventListener("click", async () => {
-        try {
-            errorDisplay.innerText = "";
-            const { data, error } = await window.supabase.auth.signInAnonymously();
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            
-            const uniqueTailId = data.user.id.substring(0, 5).toUpperCase();
-            const guestUserTag = `GUEST_${uniqueTailId}`;
-            
-            await window.supabase.from("users").insert([{
-                uid: data.user.id,
-                name: guestUserTag,
-                email: `guest_${Date.now()}@mwamini.local`,
-                status_text: "Browsing chat updates via temporary guest channel access.",
-                account_mode: "guest",
-                is_online: true
-            }]);
+            window.location.href = "dashboard.html";
+        } else {
+            const { data, error } = await supabase.auth.signUp({ email, password });
+            if (error) throw error;
 
-            saveSessionAndProceed(data.user.id, guestUserTag, "guest");
-        } catch (err) {
-            errorDisplay.innerText = "Guest login system failure: " + err.message;
+            if (data.user) {
+                // Provision profile safely
+                const { error: profileError } = await supabase.from("profiles").insert([{
+                    id: data.user.id,
+                    name: name,
+                    email: email
+                }]);
+                if (profileError) throw profileError;
+                
+                errorDisplay.textContent = "Registration successful! Please check your email to verify (if required) or log in.";
+            }
         }
-    });
-}
+    } catch (err) {
+        errorDisplay.textContent = err.message;
+        errorDisplay.style.color = "#ea0038";
+    }
+});
 
-function saveSessionAndProceed(uid, name, mode) {
-    localStorage.setItem("session_uid", uid);
-    localStorage.setItem("session_name", name);
-    localStorage.setItem("session_account_mode", mode);
-    window.location.href = "dashboard.html";
-}
+guestBtn.addEventListener("click", async () => {
+    try {
+        errorDisplay.textContent = "Connecting as guest...";
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error) throw error;
+
+        if (data.user) {
+            const guestTag = "GUEST_" + data.user.id.substring(0, 5).toUpperCase();
+            await supabase.from("profiles").insert([{
+                id: data.user.id,
+                name: guestTag,
+                email: "guest@mwamini.local",
+                account_mode: "guest"
+            }]);
+            window.location.href = "dashboard.html";
+        }
+    } catch (err) {
+        errorDisplay.textContent = "Guest failure: " + err.message;
+        errorDisplay.style.color = "#ea0038";
+    }
+});
