@@ -1,22 +1,8 @@
-import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+// ========================================================
+// SUPABASE NATIVE AUTHENTICATION GATEWAY
+// ========================================================
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBtDMYBR0jcyK-JfgsYtET1SenPngzmQi4",
-  authDomain: "mwamini-chatting-web.firebaseapp.com",
-  projectId: "mwamini-chatting-web",
-  storageBucket: "mwamini-chatting-web.firebasestorage.app",
-  messagingSenderId: "640958885512",
-  appId: "1:640958885512:web:2f9a636acc85534009b93d",
-  measurementId: "G-SW9FBXX78G"
-};
-
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-let isLoginMode = false; // Registration layout state serves as default structural baseline
+let isLoginMode = false;
 
 export function initAuthGateway() {
     const submitBtn = document.getElementById("auth-submit-btn");
@@ -26,7 +12,7 @@ export function initAuthGateway() {
     const errorDisplay = document.getElementById("error-message");
     const guestBtn = document.getElementById("guest-login-btn");
 
-    if (!submitBtn) return; // Prevent breakdown on secondary dashboard screens
+    if (!submitBtn) return;
 
     // --- INTERFACE MODE VIEW TOGGLE SWITCH ---
     switchLink.addEventListener("click", () => {
@@ -37,12 +23,12 @@ export function initAuthGateway() {
             submitBtn.innerText = "Login";
             switchLink.innerText = "Register here";
             switchText.innerText = "Don't have an account?";
-            nameGroup.style.display = "none"; // Hide name field during direct Login sequences
+            nameGroup.style.display = "none";
         } else {
             submitBtn.innerText = "Register";
             switchLink.innerText = "Login here";
             switchText.innerText = "Already have an account?";
-            nameGroup.style.display = "block"; // Re-expose name entry during signup sequences
+            nameGroup.style.display = "block";
         }
     });
 
@@ -50,7 +36,7 @@ export function initAuthGateway() {
     submitBtn.addEventListener("click", async () => {
         const email = document.getElementById("auth-email").value.trim();
         const password = document.getElementById("auth-password").value.trim();
-        const name = document.getElementById("auth-name").value.trim();
+        const name = document.getElementById("auth-name")?.value.trim();
 
         errorDisplay.innerText = "";
 
@@ -61,39 +47,39 @@ export function initAuthGateway() {
 
         try {
             if (isLoginMode) {
-                // 1. Fire Standard Authentication Sign-In Process
-                const credential = await signInWithEmailAndPassword(auth, email, password);
-                
-                const userSnap = await getDoc(doc(db, "users", credential.user.uid));
-                let sessionName = email.split("@")[0];
-                let sessionMode = "standard";
+                // 1. Supabase Sign-In
+                const { data, error } = await window.supabase.auth.signInWithPassword({ email, password });
+                if (error) throw error;
 
-                if (userSnap.exists()) {
-                    sessionName = userSnap.data().name;
-                    sessionMode = userSnap.data().accountMode || "standard";
-                }
+                const { data: userProfile } = await window.supabase
+                    .from("users")
+                    .select("name, account_mode")
+                    .eq("uid", data.user.id)
+                    .single();
 
-                saveSessionAndProceed(credential.user.uid, sessionName, sessionMode);
+                const sessionName = userProfile ? userProfile.name : email.split("@")[0];
+                const sessionMode = userProfile ? userProfile.account_mode : "standard";
+
+                saveSessionAndProceed(data.user.id, sessionName, sessionMode);
             } else {
-                // 2. Fire New Account Registration Process
-                const credential = await createUserWithEmailAndPassword(auth, email, password);
-                
-                const profilePayload = {
-                    uid: credential.user.uid,
+                // 2. Supabase Registration
+                const { data, error } = await window.supabase.auth.signUp({ email, password });
+                if (error) throw error;
+
+                // Provision new user profile in public.users table
+                await window.supabase.from("users").insert([{
+                    uid: data.user.id,
                     name: name,
                     email: email,
-                    status: "Hey there! I am using Mwamini Chat.",
-                    accountMode: "standard",
-                    isOnline: true,
-                    avatarUrl: "",
-                    createdAt: serverTimestamp()
-                };
+                    status_text: "Hey there! I am using Mwamini Chat.",
+                    account_mode: "standard",
+                    is_online: true
+                }]);
 
-                await setDoc(doc(db, "users", credential.user.uid), profilePayload);
-                saveSessionAndProceed(credential.user.uid, name, "standard");
+                saveSessionAndProceed(data.user.id, name, "standard");
             }
         } catch (err) {
-            errorDisplay.innerText = err.message.replace("Firebase: ", "");
+            errorDisplay.innerText = err.message;
         }
     });
 
@@ -101,24 +87,22 @@ export function initAuthGateway() {
     guestBtn.addEventListener("click", async () => {
         try {
             errorDisplay.innerText = "";
-            const credential = await signInAnonymously(auth);
+            const { data, error } = await window.supabase.auth.signInAnonymously();
+            if (error) throw error;
             
-            const uniqueTailId = credential.user.uid.substring(0, 5).toUpperCase();
+            const uniqueTailId = data.user.id.substring(0, 5).toUpperCase();
             const guestUserTag = `GUEST_${uniqueTailId}`;
             
-            const guestPayload = {
-                uid: credential.user.uid,
+            await window.supabase.from("users").insert([{
+                uid: data.user.id,
                 name: guestUserTag,
-                email: "guest@mwamini.local",
-                status: "Browsing chat updates via temporary guest channel access.",
-                accountMode: "standard",
-                isOnline: true,
-                avatarUrl: "",
-                createdAt: serverTimestamp()
-            };
+                email: `guest_${Date.now()}@mwamini.local`,
+                status_text: "Browsing chat updates via temporary guest channel access.",
+                account_mode: "guest",
+                is_online: true
+            }]);
 
-            await setDoc(doc(db, "users", credential.user.uid), guestPayload);
-            saveSessionAndProceed(credential.user.uid, guestUserTag, "standard");
+            saveSessionAndProceed(data.user.id, guestUserTag, "guest");
         } catch (err) {
             errorDisplay.innerText = "Guest login system failure: " + err.message;
         }
