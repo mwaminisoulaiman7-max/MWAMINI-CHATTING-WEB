@@ -4,56 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MWAMINI CHAT WEB - Workspace Upgrade</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: #00a884; background-image: linear-gradient(180deg, #00a884 0%, #008069 100%); height: 100vh; display: flex; padding: 15px; overflow: hidden; }
-        
-        .app-window { display: flex; width: 100%; max-width: 1600px; height: 100%; margin: 0 auto; background-color: #ffffff; box-shadow: 0 6px 24px rgba(0,0,0,0.15); border-radius: 12px; overflow: hidden; }
-        
-        /* Left Panel */
-        .sidebar-left { width: 30%; min-width: 340px; max-width: 400px; height: 100%; border-right: 1px solid #e9edef; display: flex; flex-direction: column; background: #ffffff; }
-        .sidebar-header { height: 64px; background: #f0f2f5; display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid #e9edef; }
-        
-        /* Room Creator Panel */
-        .group-creation-box { padding: 14px; background: #f8f9fa; border-bottom: 1px solid #e9edef; display: flex; flex-direction: column; gap: 6px; }
-        .group-creation-box label { font-size: 10px; font-weight: 700; color: #008069; letter-spacing: 0.5px; }
-        .group-creation-box input, .group-creation-box select { width: 100%; padding: 7px 10px; border: 1px solid #e1e4e6; border-radius: 6px; font-size: 13px; outline: none; }
-        .btn-group-create { background: #008069; color: white; border: none; padding: 8px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; }
-
-        .search-box { padding: 10px 14px; background: #ffffff; border-bottom: 1px solid #f0f2f5; }
-        .search-box input { width: 100%; padding: 8px 12px 8px 36px; background: #f0f2f5; border: none; border-radius: 8px; font-size: 13px; outline: none; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%23667781"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>'); background-repeat: no-repeat; background-position: 12px center; }
-        .user-list { flex: 1; overflow-y: auto; background: #ffffff; }
-        
-        /* Central Workspace */
-        .chat-panel { flex: 1; height: 100%; display: flex; flex-direction: column; background: #efeae2; position: relative; }
-        
-        /* Right Utilities Panel */
-        .sidebar-right { width: 28%; min-width: 280px; max-width: 360px; height: 100%; border-left: 1px solid #e9edef; background: #f8f9fa; display: flex; flex-direction: column; }
-        .right-header { height: 64px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #e9edef; font-weight: 600; color: #111b21; }
-        .right-body { padding: 16px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; flex: 1; }
-
-        .welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 40px; background: #f8f9fa; }
-        .welcome-hero-art { font-size: 70px; margin-bottom: 15px; }
-        .welcome-title { color: #111b21; font-size: 28px; margin-bottom: 10px; }
-        .welcome-subtitle { color: #667781; font-size: 14px; max-width: 480px; line-height: 1.5; margin-bottom: 20px; }
-
-        .chat-area { display: flex; flex-direction: column; height: 100%; }
-        .hidden { display: none !important; }
-        
-        .room-meta-info { font-size: 11px; font-weight: bold; text-transform: uppercase; color: #008069; letter-spacing: 0.8px; margin-bottom: 2px; display: block; }
-        .status-badge { font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 10px; margin-left: 6px; }
-        .status-online { background: #e8f5e9; color: #1b5e20; }
-        .status-offline { background: #f5f5f5; color: #616161; }
-        .status-public { background: #e0f7fa; color: #006064; }
-        .status-protected { background: #fff3e0; color: #e65100; }
-        .unread-indicator { background: #00a884; color: white; border-radius: 12px; padding: 2px 6px; font-size: 10px; font-weight: bold; }
-
-        .utility-card { background: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e9edef; }
-        .utility-card h4 { font-size: 13px; color: #111b21; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
-        .btn-action { width: 100%; background: #008069; color: white; border: none; padding: 9px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; margin-top: 6px; }
-        .btn-action:hover { background: #005c4b; }
-        .share-link-box { background: #f0f2f5; padding: 8px; border-radius: 4px; font-size: 12px; color: #4a5568; word-break: break-all; margin-top: 5px; border: 1px dashed #cbd5e1; font-family: monospace; }
-    </style>
+    <link rel="stylesheet" href="./style.css">
 </head>
 <body>
     <div class="app-window">
@@ -61,16 +12,15 @@
             <header class="sidebar-header">
                 <div>
                     <h3 id="current-user-title">MWAMINI WORKSPACE</h3>
-                    <p id="my-status-display" style="font-size: 11px; color: #667781; font-style: italic;">Connecting...</p>
+                    <p id="my-status-display" class="presence-status-text">Connecting...</p>
                 </div>
-                <button id="logout-btn" style="background:#ea0038; color:white; border:none; padding:6px 10px; font-size:11px; font-weight:bold; border-radius:4px; cursor:pointer;">Exit</button>
+                <button id="logout-btn" class="btn-logout">Exit</button>
             </header>
 
-            <div style="display: flex; gap: 5px; padding: 10px 14px; background: #ffffff; border-bottom: 1px solid #f0f2f5; align-items: center;">
-                <input type="text" id="status-input" placeholder="Update your status story..." style="flex: 1; padding: 6px 10px; border: 1px solid #e1e4e6; border-radius: 6px; font-size: 12px; outline: none;">
-                <button id="update-status-btn" style="background: #00a884; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">Post</button>
+            <div class="status-updater-tray">
+                <input type="text" id="status-input" placeholder="Update your status story...">
+                <button id="update-status-btn">Post</button>
             </div>
-            <div id="active-statuses-view" style="display: flex; gap: 6px; overflow-x: auto; padding: 6px 14px; background: #fff; border-bottom: 1px solid #f0f2f5;"></div>
 
             <div class="group-creation-box">
                 <label>LAUNCH NEW CHAT ROOM</label>
@@ -98,57 +48,28 @@
             </div>
 
             <div id="active-chat-area" class="chat-area hidden">
-                <header class="chat-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: #f0f2f5; border-bottom: 1px solid #e9edef; height: 64px;">
+                <header class="chat-header">
                     <div>
                         <span id="chat-header-group-meta" class="room-meta-info"></span>
                         <div style="display: flex; align-items: center; gap: 4px;">
-                            <h3 id="chat-header-name" style="margin: 0; color: #111b21; font-size: 15px; font-weight: 600;">Active Session</h3>
-                            <span id="chat-header-presence-badge"></span>
+                            <h3 id="chat-header-name">Active Session</h3>
                         </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                        <select id="background-changer" style="font-size: 11px; padding: 4px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer;">
-                            <option value="#efeae2">📦 Tan Base</option>
-                            <option value="#bbdefb">💎 Electric Blue</option>
-                            <option value="#121b22">🌙 Night Vision</option>
-                        </select>
                     </div>
                 </header>
                 
-                <div class="message-stream" id="message-stream" style="flex:1; overflow-y:auto; padding:20px; background-color:#efeae2;"></div>
+                <div class="message-stream" id="message-stream"></div>
                 
-                <footer class="chat-input-bar" style="padding: 10px 16px; background: #f0f2f5; display: flex; align-items: center; gap: 12px;">
-                    <button type="button" id="voice-record-btn" title="Record Audio" style="background: transparent; border: none; font-size: 20px; cursor: pointer;">🎤</button>
+                <footer class="chat-input-bar">
+                    <button type="button" id="voice-record-btn" class="file-attach-btn" title="Record Audio">🎤</button>
                     <span id="voice-recording-status" class="hidden" style="color: #ea0038; font-size: 10px; font-weight: bold;">● RECORDING</span>
                     <form id="message-form" style="display: flex; flex: 1; gap: 12px; margin: 0;">
-                        <input type="text" id="message-input" placeholder="Write a secure transmission..." autocomplete="off" style="flex:1; padding:10px 14px; border-radius:6px; border:1px solid #e1e4e6; font-size:13px; outline:none;">
-                        <button type="submit" style="padding:10px 20px; background:#008069; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:13px;">Send</button>
+                        <input type="text" id="message-input" placeholder="Write a secure transmission..." autocomplete="off">
+                        <button type="submit" class="btn-send">Send</button>
                     </form>
                 </footer>
             </div>
         </main>
-
-        <aside class="sidebar-right hidden" id="group-utilities-sidebar">
-            <div class="right-header">Channel Dashboard</div>
-            <div class="right-body">
-                <div class="utility-card">
-                    <h4>Add Colleague to Room</h4>
-                    <p style="font-size: 12px; color: #667781; margin-bottom: 8px;">Directly provision access rules for another user inside this chatroom.</p>
-                    <select id="utility-member-dropdown" style="width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1; font-size:13px;"></select>
-                    <button id="btn-add-member-action" class="btn-action">Provision Access</button>
-                </div>
-
-                <div class="utility-card">
-                    <h4>Share Secure Invite Link</h4>
-                    <p style="font-size: 12px; color: #667781; margin-bottom: 8px;">Generate an entry invitation string verification package for this room.</p>
-                    <button id="btn-generate-invite" class="btn-action" style="background: #00a884;">Generate Workspace Link</button>
-                    <div id="invite-link-display" class="share-link-box hidden"></div>
-                </div>
-            </div>
-        </aside>
     </div>
-
     <script type="module" src="./app.js"></script>
 </body>
 </html>
